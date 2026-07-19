@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Ledger</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fafaf9;
+    --surface: #ffffff;
+    --surface-2: #f4f4f2;
+    --border: #e7e5e4;
+    --border-strong: #d6d3d1;
+    --text: #0c0a09;
+    --text-2: #57534e;
+    --text-3: #a8a29e;
+    --accent: #0c0a09;
+    --accent-fg: #ffffff;
+    --focus: rgba(12,10,9,0.12);
+    --danger: #b91c1c;
+    --danger-bg: #fef2f2;
+    --nav-w: 56px;
+    --ledger-w: 340px;
+    --radius: 10px;
+    --radius-lg: 14px;
+    --shadow: 0 1px 2px rgba(0,0,0,0.04);
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --surface-2: #1c1c1c;
+      --border: #262626;
+      --border-strong: #363636;
+      --text: #fafaf9;
+      --text-2: #a8a29e;
+      --text-3: #57534e;
+      --accent: #fafaf9;
+      --accent-fg: #0a0a0a;
+      --focus: rgba(250,250,249,0.15);
+      --danger: #f87171;
+      --danger-bg: #2c1616;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3);
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+    font-size: 14px; line-height: 1.6;
+    display: flex; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; cursor: pointer; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ============ 左侧导航 ============ */
+  #nav {
+    width: var(--nav-w); flex-shrink: 0;
+    background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 14px 0;
+  }
+  #nav .logo {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--accent); color: var(--accent-fg);
+    display: grid; place-items: center;
+    font-weight: 500; font-size: 13px; margin-bottom: 20px;
+    letter-spacing: -0.02em;
+  }
+  #nav .spacer { flex: 1; }
+  .nav-btn {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: transparent; border: none; color: var(--text-2);
+    display: grid; place-items: center; margin-bottom: 4px;
+    transition: background 120ms, color 120ms;
+    position: relative;
+  }
+  .nav-btn:hover { background: var(--surface-2); color: var(--text); }
+  .nav-btn.active { background: var(--surface-2); color: var(--text); }
+  .nav-btn svg { width: 18px; height: 18px; stroke-width: 1.6; }
+  .nav-btn[data-badge]::after {
+    content: attr(data-badge);
+    position: absolute; top: 4px; right: 4px;
+    min-width: 14px; height: 14px; border-radius: 7px; padding: 0 4px;
+    background: var(--accent); color: var(--accent-fg);
+    font-size: 9px; font-weight: 500;
+    display: grid; place-items: center;
+    line-height: 1;
+  }
+  .nav-tooltip {
+    position: absolute; left: calc(var(--nav-w) - 4px); top: 50%;
+    transform: translateY(-50%) translateX(-4px);
+    background: var(--text); color: var(--bg);
+    font-size: 12px; padding: 4px 8px; border-radius: 6px;
+    white-space: nowrap; pointer-events: none;
+    opacity: 0; transition: opacity 120ms, transform 120ms;
+    z-index: 100;
+  }
+  .nav-btn:hover .nav-tooltip { opacity: 1; transform: translateY(-50%) translateX(0); }
+
+  /* ============ 主区 ============ */
+  main { flex: 1; display: flex; min-width: 0; }
+
+  /* ============ 聊天区 ============ */
+  #chat {
+    flex: 1; display: flex; flex-direction: column; min-width: 0;
+    border-right: 1px solid var(--border);
+  }
+  #chat-header {
+    height: 52px; flex-shrink: 0; padding: 0 22px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  #chat-header .title { font-size: 14px; font-weight: 500; letter-spacing: -0.01em; }
+  #chat-header .subtitle { font-size: 12px; color: var(--text-3); margin-left: 8px; }
+  .icon-btn {
+    background: transparent; border: none; padding: 6px; border-radius: 6px;
+    color: var(--text-2); display: grid; place-items: center;
+  }
+  .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+  .icon-btn svg { width: 16px; height: 16px; stroke-width: 1.6; }
+
+  #messages {
+    flex: 1; overflow-y: auto; padding: 24px 22px 8px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .msg-row { display: flex; flex-direction: column; max-width: 78%; }
+  .msg-row.user { align-self: flex-end; align-items: flex-end; }
+  .msg-row.assistant { align-self: flex-start; align-items: flex-start; }
+  .msg {
+    padding: 10px 14px; border-radius: var(--radius-lg);
+    font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+  }
+  .msg.user { background: var(--accent); color: var(--accent-fg); border-bottom-right-radius: 6px; }
+  .msg.assistant { background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 6px; }
+  .msg.error { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger); }
+  .msg b { font-weight: 500; }
+
+  .meta {
+    display: flex; gap: 10px; flex-wrap: wrap; margin: 6px 4px 12px;
+    font-size: 11px; color: var(--text-3);
+  }
+  .meta .chip { display: inline-flex; align-items: center; gap: 4px; }
+  .meta .chip::before {
+    content: ""; width: 4px; height: 4px; border-radius: 50%;
+    background: var(--text-3);
+  }
+  .meta .chip.ok::before { background: #16a34a; }
+  .meta .chip.fail::before { background: var(--danger); }
+
+  .confirm-card {
+    align-self: flex-start; background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg); padding: 14px 16px; max-width: 78%;
+    margin-bottom: 12px; box-shadow: var(--shadow);
+  }
+  .confirm-card .title {
+    font-weight: 500; font-size: 13px; color: var(--text-2);
+    display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+  }
+  .confirm-card .body { font-size: 14px; }
+  .confirm-card .btns { margin-top: 12px; display: flex; gap: 8px; }
+  .confirm-card button {
+    border: 1px solid var(--border-strong); background: var(--surface);
+    color: var(--text); border-radius: 8px;
+    padding: 6px 14px; font-size: 13px;
+    transition: background 120ms;
+  }
+  .confirm-card button:hover:not(:disabled) { background: var(--surface-2); }
+  .confirm-card .yes { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .confirm-card .yes:hover:not(:disabled) { opacity: 0.85; background: var(--accent); }
+  .confirm-card button:disabled { opacity: 0.4; cursor: default; }
+
+  .typing {
+    align-self: flex-start; padding: 10px 14px;
+    display: flex; gap: 4px; margin-bottom: 12px;
+  }
+  .typing span {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--text-3);
+    animation: pulse 1.2s infinite ease-in-out;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.15s; }
+  .typing span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes pulse {
+    0%, 60%, 100% { opacity: 0.3; transform: scale(1); }
+    30% { opacity: 1; transform: scale(1.15); }
+  }
+
+  #input-bar {
+    flex-shrink: 0; padding: 12px 20px 20px; background: transparent;
+  }
+  #input-wrap {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 4px 4px 4px 14px;
+    transition: border-color 120ms, box-shadow 120ms;
+  }
+  #input-wrap:focus-within {
+    border-color: var(--border-strong); box-shadow: 0 0 0 3px var(--focus);
+  }
+  #input {
+    flex: 1; border: none; background: transparent; color: var(--text);
+    padding: 8px 0; font-size: 14px; outline: none; font-family: inherit;
+  }
+  #input::placeholder { color: var(--text-3); }
+  #send-btn {
+    width: 32px; height: 32px; border-radius: 8px; border: none;
+    background: var(--accent); color: var(--accent-fg);
+    display: grid; place-items: center; transition: opacity 120ms;
+  }
+  #send-btn:hover:not(:disabled) { opacity: 0.85; }
+  #send-btn:disabled { opacity: 0.3; cursor: default; }
+  #send-btn svg { width: 14px; height: 14px; stroke-width: 2; }
+
+  .quick-prompts {
+    display: flex; gap: 6px; margin-top: 8px; padding: 0 4px;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .quick-prompts::-webkit-scrollbar { display: none; }
+  .quick-prompt {
+    flex-shrink: 0; padding: 4px 10px; border-radius: 6px;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-2); font-size: 12px;
+    transition: background 120ms, color 120ms;
+  }
+  .quick-prompt:hover { background: var(--surface-2); color: var(--text); }
+
+  /* ============ 账本区 ============ */
+  #ledger { width: var(--ledger-w); flex-shrink: 0; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+  #ledger-header {
+    height: 52px; flex-shrink: 0; padding: 0 18px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  #ledger-header .month-nav { display: flex; align-items: center; gap: 6px; }
+  #ledger-header .month { font-size: 14px; font-weight: 500; letter-spacing: -0.01em; min-width: 84px; text-align: center; }
+  #ledger-body { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 20px; }
+
+  .summary { }
+  .summary .label { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+  .summary .amount {
+    font-size: 30px; font-weight: 500; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums; margin-top: 4px;
+  }
+  .summary .amount .cur { font-size: 16px; color: var(--text-3); margin-right: 2px; font-weight: 400; }
+  .summary .count { font-size: 12px; color: var(--text-3); margin-top: 4px; }
+
+  .cats { display: flex; flex-direction: column; gap: 10px; }
+  .cat {
+    display: grid; grid-template-columns: 68px 1fr auto; gap: 10px;
+    align-items: center; font-size: 13px;
+  }
+  .cat .name { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cat .bar-wrap { height: 4px; background: var(--surface-2); border-radius: 2px; overflow: hidden; }
+  .cat .bar { height: 100%; background: var(--text); border-radius: 2px; transition: width 300ms ease; }
+  .cat .val { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 500; }
+
+  .section-title {
+    font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em;
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .exps { display: flex; flex-direction: column; }
+  .exp {
+    display: grid; grid-template-columns: 40px 1fr auto;
+    gap: 10px; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .exp:last-child { border-bottom: none; }
+  .exp .date { color: var(--text-3); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .exp .info { min-width: 0; }
+  .exp .info .cat-tag { font-size: 11px; color: var(--text-3); }
+  .exp .info .note { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .exp .amt { font-variant-numeric: tabular-nums; font-weight: 500; }
+
+  .empty { color: var(--text-3); font-size: 13px; text-align: center; padding: 32px 12px; }
+
+  /* ============ 日志抽屉（右侧滑入） ============ */
+  #log-drawer {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: 460px; max-width: 100vw;
+    background: var(--surface); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    transform: translateX(100%); transition: transform 220ms ease;
+    z-index: 50; box-shadow: -4px 0 24px rgba(0,0,0,0.06);
+  }
+  #log-drawer.open { transform: translateX(0); }
+  #log-header {
+    height: 52px; flex-shrink: 0; padding: 0 18px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  #log-header .h { font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  #log-header .badge { font-size: 11px; color: var(--text-3); }
+  #log-body {
+    flex: 1; overflow-y: auto; padding: 12px 18px 20px;
+    font-family: var(--mono); font-size: 12px; line-height: 1.9;
+  }
+  .log-line {
+    padding: 6px 10px; border-radius: 6px; margin-bottom: 4px;
+    background: var(--surface-2);
+    display: grid; grid-template-columns: auto auto auto 1fr auto; gap: 10px;
+    align-items: baseline;
+    overflow-x: auto; white-space: nowrap;
+  }
+  .log-line::-webkit-scrollbar { height: 4px; }
+  .log-line .time { color: var(--text-3); }
+  .log-line .round { color: var(--text-3); font-size: 10px; }
+  .log-line .tool { color: var(--text); font-weight: 500; }
+  .log-line .args { color: var(--text-2); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+  .log-line .status.ok { color: #16a34a; }
+  .log-line .status.fail { color: var(--danger); }
+  .log-line .ms { color: var(--text-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+  #log-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.2); z-index: 49;
+    opacity: 0; pointer-events: none; transition: opacity 220ms;
+  }
+  #log-overlay.open { opacity: 1; pointer-events: auto; }
+
+  /* ============ 小屏适配 ============ */
+  @media (max-width: 900px) {
+    #ledger { width: 280px; }
+  }
+  @media (max-width: 720px) {
+    #ledger { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ 左侧图标导航 ============ -->
+<aside id="nav">
+  <div class="logo">AL</div>
+  <button class="nav-btn active" title="聊天">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    <span class="nav-tooltip">聊天</span>
+  </button>
+  <button class="nav-btn" onclick="askReport()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
+    <span class="nav-tooltip">生成月报</span>
+  </button>
+  <button class="nav-btn" onclick="openSkill()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
+    <span class="nav-tooltip">Skill 文件</span>
+  </button>
+  <button class="nav-btn" onclick="toggleLogs()" id="log-toggle">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+    <span class="nav-tooltip">Agent 日志</span>
+  </button>
+  <div class="spacer"></div>
+  <button class="nav-btn" onclick="resetChat()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
+    <span class="nav-tooltip">新对话</span>
+  </button>
+</aside>
+
+<main>
+  <!-- ============ 聊天区 ============ -->
+  <section id="chat">
+    <div id="chat-header">
+      <div>
+        <span class="title">AI Ledger</span>
+        <span class="subtitle">说一句话，就记好账</span>
+      </div>
+    </div>
+    <div id="messages">
+      <div class="msg-row assistant">
+        <div class="msg assistant">你好。直接说就行——比如「早上瑞幸19，中午麻辣烫28」，或者「这个月吃饭花了多少」。</div>
+      </div>
+    </div>
+    <div id="input-bar">
+      <div id="input-wrap">
+        <input id="input" placeholder="随口说一笔账…" autocomplete="off">
+        <button id="send-btn" onclick="send()" aria-label="发送">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </div>
+      <div class="quick-prompts">
+        <button class="quick-prompt" onclick="quickSend('这个月一共花了多少')">这个月花了多少</button>
+        <button class="quick-prompt" onclick="quickSend('生成这个月的消费报告')">生成月报</button>
+        <button class="quick-prompt" onclick="quickSend('这个月吃饭花了多少')">吃饭花了多少</button>
+        <button class="quick-prompt" onclick="quickSend('最近5笔账')">最近5笔账</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 账本区 ============ -->
+  <section id="ledger">
+    <div id="ledger-header">
+      <div class="month-nav">
+        <button class="icon-btn" onclick="shiftMonth(-1)" aria-label="上月">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div class="month" id="month-label"></div>
+        <button class="icon-btn" onclick="shiftMonth(1)" aria-label="下月">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="ledger-body">
+      <div class="summary">
+        <div class="label">本月支出</div>
+        <div class="amount"><span class="cur">¥</span><span id="total">0</span></div>
+        <div class="count" id="count"></div>
+      </div>
+      <div>
+        <div class="section-title"><span>分类分布</span></div>
+        <div class="cats" id="cats"></div>
+      </div>
+      <div>
+        <div class="section-title"><span>明细</span><span id="detail-count"></span></div>
+        <div class="exps" id="exps"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ============ 日志抽屉 ============ -->
+<div id="log-overlay" onclick="toggleLogs()"></div>
+<aside id="log-drawer">
+  <div id="log-header">
+    <div class="h">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Agent 调用日志
+      <span class="badge" id="log-count"></span>
+    </div>
+    <button class="icon-btn" onclick="toggleLogs()" aria-label="关闭">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div id="log-body"></div>
+</aside>
+
+<script>
+const CN_MONTH = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+let curMonth = new Date().toISOString().slice(0, 7);
+const messages = document.getElementById("messages");
+const input = document.getElementById("input");
+const sendBtn = document.getElementById("send-btn");
+
+function esc(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function md(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>"); }
+
+function addMsg(role, text) {
+  const row = document.createElement("div");
+  row.className = "msg-row " + role;
+  const bubble = document.createElement("div");
+  bubble.className = "msg " + role;
+  bubble.innerHTML = md(text);
+  row.appendChild(bubble);
+  messages.appendChild(row);
+  scrollDown();
+}
+
+function addMeta(r) {
+  if (!r.rounds && !(r.events||[]).length) return;
+  const div = document.createElement("div");
+  div.className = "meta";
+  let html = `<span class="chip">${r.rounds} 轮循环</span>`;
+  for (const e of (r.events||[])) {
+    const cls = e.ok ? "ok" : "fail";
+    html += `<span class="chip ${cls}">${esc(e.tool)} · ${e.ms}ms</span>`;
+  }
+  div.innerHTML = html;
+  messages.appendChild(div);
+  scrollDown();
+}
+
+let typingEl = null;
+function setBusy(b) {
+  sendBtn.disabled = b; input.disabled = b;
+  if (b) {
+    typingEl = document.createElement("div");
+    typingEl.className = "typing";
+    typingEl.innerHTML = "<span></span><span></span><span></span>";
+    messages.appendChild(typingEl);
+    scrollDown();
+  } else if (typingEl) { typingEl.remove(); typingEl = null; }
+}
+
+function scrollDown() { messages.scrollTop = messages.scrollHeight; }
+
+async function post(url, body) {
+  try {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    return await r.json();
+  } catch {
+    return { type: "error", content: "连不上本地服务了，确认 run.sh 还在运行。", events: [], rounds: 0 };
+  }
+}
+
+function handle(r) {
+  setBusy(false);
+  if (r.type === "confirm") { addConfirmCard(r); }
+  else if (r.type === "error") { addMsg("error", r.content); }
+  else { addMsg("assistant", r.content); addMeta(r); }
+  refreshLedger();
+  refreshLogs(true);
+}
+
+async function send() {
+  const text = input.value.trim();
+  if (!text || sendBtn.disabled) return;
+  addMsg("user", text);
+  input.value = "";
+  setBusy(true);
+  handle(await post("/api/chat", { message: text }));
+}
+function quickSend(text) {
+  if (sendBtn.disabled) return;
+  input.value = text; send();
+}
+function askReport() { quickSend("生成这个月的消费报告"); }
+input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+
+function addConfirmCard(r) {
+  const div = document.createElement("div");
+  div.className = "confirm-card";
+  div.innerHTML = `<div class="title">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+    需要你确认</div>
+    <div class="body">${esc(r.summary)}</div>
+    <div class="btns"><button class="yes">确认</button><button class="no">取消</button></div>`;
+  div.querySelector(".yes").onclick = () => resolveConfirm(div, true);
+  div.querySelector(".no").onclick = () => resolveConfirm(div, false);
+  messages.appendChild(div);
+  scrollDown();
+}
+async function resolveConfirm(card, approved) {
+  card.querySelectorAll("button").forEach(b => b.disabled = true);
+  card.style.opacity = .6;
+  setBusy(true);
+  handle(await post("/api/confirm", { approved }));
+}
+async function resetChat() {
+  await post("/api/reset", {});
+  messages.innerHTML = '<div class="msg-row assistant"><div class="msg assistant">新对话开始了，账本数据还在。</div></div>';
+}
+
+function openSkill() {
+  addMsg("assistant", "Skill 文件在 `skills/` 目录下：\n• `categories.md` — 分类规则（改完立即生效）\n• `report_style.md` — 月报写作风格\n\n用 VS Code 或任意文本编辑器打开即可。");
+}
+
+/* ============ 账本 ============ */
+function shiftMonth(d) {
+  const [y, m] = curMonth.split("-").map(Number);
+  const nd = new Date(y, m - 1 + d, 1);
+  curMonth = `${nd.getFullYear()}-${String(nd.getMonth()+1).padStart(2,"0")}`;
+  refreshLedger();
+}
+
+async function refreshLedger() {
+  const r = await fetch(`/api/ledger?month=${curMonth}`).then(x=>x.json()).catch(()=>null);
+  if (!r) return;
+  const [y, m] = r.month.split("-");
+  document.getElementById("month-label").textContent = `${y} · ${CN_MONTH[+m-1]}`;
+  document.getElementById("total").textContent = r.total.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
+  document.getElementById("count").textContent = r.count ? `共 ${r.count} 笔` : "还没有账目";
+  document.getElementById("detail-count").textContent = r.count ? `${r.count} 笔` : "";
+
+  const max = Math.max(...r.by_category.map(g=>g.total), 1);
+  const catsEl = document.getElementById("cats");
+  if (!r.by_category.length) {
+    catsEl.innerHTML = '<div class="empty">本月还没有账目</div>';
+  } else {
+    catsEl.innerHTML = r.by_category.map(g => `
+      <div class="cat">
+        <span class="name">${esc(g.category)}</span>
+        <div class="bar-wrap"><div class="bar" style="width:${(g.total/max*100).toFixed(1)}%"></div></div>
+        <span class="val">¥${g.total.toLocaleString()}</span>
+      </div>`).join("");
+  }
+
+  const expsEl = document.getElementById("exps");
+  if (!r.expenses.length) {
+    expsEl.innerHTML = '<div class="empty">暂无明细</div>';
+  } else {
+    expsEl.innerHTML = r.expenses.map(e => `
+      <div class="exp">
+        <span class="date">${e.date.slice(5)}</span>
+        <div class="info">
+          <div class="note">${esc(e.note || e.category)}</div>
+          <div class="cat-tag">${esc(e.category)}</div>
+        </div>
+        <span class="amt">¥${e.amount.toLocaleString()}</span>
+      </div>`).join("");
+  }
+}
+
+/* ============ 日志抽屉 ============ */
+function toggleLogs() {
+  const d = document.getElementById("log-drawer");
+  const o = document.getElementById("log-overlay");
+  const b = document.getElementById("log-toggle");
+  const on = !d.classList.contains("open");
+  d.classList.toggle("open", on);
+  o.classList.toggle("open", on);
+  b.classList.toggle("active", on);
+  if (on) refreshLogs(true);
+}
+
+async function refreshLogs(forceRender) {
+  const d = document.getElementById("log-drawer");
+  if (!forceRender && !d.classList.contains("open")) return;
+  const r = await fetch("/api/logs").then(x=>x.json()).catch(()=>null);
+  if (!r) return;
+  const body = document.getElementById("log-body");
+  const cnt = document.getElementById("log-count");
+  cnt.textContent = r.logs.length ? `${r.logs.length} 条` : "";
+  const badge = document.querySelector('#log-toggle');
+  if (r.logs.length) badge.setAttribute("data-badge", String(Math.min(99, r.logs.length)));
+  else badge.removeAttribute("data-badge");
+
+  if (!r.logs.length) {
+    body.innerHTML = '<div class="empty">还没有调用记录。每次工具调用都会在这里留一行。</div>';
+    return;
+  }
+  body.innerHTML = r.logs.map(l => `
+    <div class="log-line">
+      <span class="time">${esc(l.time)}</span>
+      <span class="round">R${l.round}</span>
+      <span class="tool">${esc(l.tool)}</span>
+      <span class="args">${esc(JSON.stringify(l.args))}</span>
+      <span class="status ${l.ok?'ok':'fail'}">${l.ok?'✓':'✗'} <span class="ms">${l.ms}ms</span></span>
+    </div>`).join("");
+  body.scrollTop = body.scrollHeight;
+}
+
+refreshLedger();
+refreshLogs(true);
+input.focus();
+</script>
+</body>
+</html>

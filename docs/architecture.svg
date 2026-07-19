@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720" role="img" width="100%">
+<title>AI Ledger 技术架构图</title>
+<desc>从用户说一句话到看到回复的完整流程，紫色格子是 Harness 环节（可复用 AI 工程装备），青绿色是 Skill 文件和外部资源。</desc>
+<style>
+  text { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+  .th { font-weight: 500; }
+  .box-gray { fill: #F1EFE8; stroke: #5F5E5A; stroke-width: 1; }
+  .txt-gray-th { fill: #444441; }
+  .txt-gray-ts { fill: #5F5E5A; }
+  .box-purple { fill: #EEEDFE; stroke: #534AB7; stroke-width: 1; }
+  .txt-purple-th { fill: #3C3489; }
+  .txt-purple-ts { fill: #534AB7; }
+  .box-teal { fill: #E1F5EE; stroke: #0F6E56; stroke-width: 1; }
+  .txt-teal-th { fill: #085041; }
+  .txt-teal-ts { fill: #0F6E56; }
+  .txt-title { fill: #2C2C2A; }
+  .txt-caption { fill: #5F5E5A; }
+</style>
+
+<text x="480" y="34" text-anchor="middle" class="th txt-title" font-size="18">AI Ledger · 技术架构</text>
+<text x="480" y="56" text-anchor="middle" class="txt-caption" font-size="12">一次对话背后发生的事</text>
+
+<circle cx="80" cy="110" r="22" class="box-gray"/>
+<text x="80" y="115" text-anchor="middle" class="txt-gray-th" font-size="14">👤</text>
+<text x="80" y="148" text-anchor="middle" class="txt-gray-ts" font-size="11">用户</text>
+<text x="220" y="106" class="txt-caption" font-size="12">说：</text>
+<rect x="248" y="90" width="220" height="34" rx="17" class="box-gray"/>
+<text x="358" y="112" text-anchor="middle" class="txt-gray-th" font-size="13">早上瑞幸19，中午外卖35</text>
+
+<rect x="500" y="86" width="360" height="46" rx="10" fill="none" stroke="#5F5E5A" stroke-width="1"/>
+<text x="680" y="106" text-anchor="middle" class="th txt-title" font-size="12">前端 UI</text>
+<text x="680" y="122" text-anchor="middle" class="txt-caption" font-size="10">聊天 · 账本 · 日志抽屉</text>
+
+<path d="M 470 107 L 498 107" stroke="#5F5E5A" stroke-width="1" fill="none" marker-end="url(#arrow-gray)"/>
+<path d="M 480 134 L 480 176" stroke="#5F5E5A" stroke-width="1" fill="none" marker-end="url(#arrow-gray)"/>
+<text x="490" y="158" class="txt-caption" font-size="10">HTTP</text>
+
+<rect x="40" y="180" width="880" height="440" rx="12" fill="none" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="3 3"/>
+<text x="60" y="204" class="txt-caption" font-size="11">FastAPI 后端</text>
+
+<text x="130" y="240" text-anchor="middle" class="txt-caption" font-size="11">Skill 文件 [s07]</text>
+<rect x="60" y="252" width="140" height="52" rx="8" class="box-teal"/>
+<text x="130" y="272" text-anchor="middle" class="th txt-teal-th" font-size="12">categories.md</text>
+<text x="130" y="290" text-anchor="middle" class="txt-teal-ts" font-size="10">分类规则 · 常驻注入</text>
+<rect x="60" y="316" width="140" height="52" rx="8" class="box-teal"/>
+<text x="130" y="336" text-anchor="middle" class="th txt-teal-th" font-size="12">report_style.md</text>
+<text x="130" y="354" text-anchor="middle" class="txt-teal-ts" font-size="10">月报风格 · 按需注入</text>
+
+<text x="470" y="240" text-anchor="middle" class="txt-caption" font-size="11">Agent Loop 循环 [s01] · ≤ 6 轮</text>
+
+<rect x="330" y="252" width="280" height="52" rx="8" class="box-purple"/>
+<text x="360" y="272" class="th txt-purple-th" font-size="13">① 组装上下文</text>
+<text x="360" y="290" class="txt-purple-ts" font-size="10">角色 · 日期 · Skill · 10轮历史</text>
+<text x="596" y="272" text-anchor="end" class="txt-purple-ts" font-size="9">s10 · s07 · s08</text>
+
+<rect x="330" y="316" width="280" height="52" rx="8" class="box-purple"/>
+<text x="360" y="336" class="th txt-purple-th" font-size="13">② 调用大模型</text>
+<text x="360" y="354" class="txt-purple-ts" font-size="10">决定要不要调工具</text>
+<text x="596" y="336" text-anchor="end" class="txt-purple-ts" font-size="9">s11 错误恢复</text>
+
+<rect x="330" y="380" width="280" height="46" rx="8" class="box-purple"/>
+<text x="360" y="399" class="th txt-purple-th" font-size="13">③ 权限管线</text>
+<text x="360" y="415" class="txt-purple-ts" font-size="10">增查放行 · 删改要用户确认</text>
+<text x="596" y="399" text-anchor="end" class="txt-purple-ts" font-size="9">s03</text>
+
+<rect x="330" y="436" width="280" height="46" rx="8" class="box-purple"/>
+<text x="360" y="455" class="th txt-purple-th" font-size="13">④ Pre Hook 安检</text>
+<text x="360" y="471" class="txt-purple-ts" font-size="10">金额 · 日期 · 分类 校验</text>
+<text x="596" y="455" text-anchor="end" class="txt-purple-ts" font-size="9">s04</text>
+
+<rect x="330" y="492" width="280" height="52" rx="8" class="box-purple"/>
+<text x="360" y="512" class="th txt-purple-th" font-size="13">⑤ 工具执行 (Dispatch Map)</text>
+<text x="360" y="530" class="txt-purple-ts" font-size="10">add · query · delete · update · report</text>
+<text x="596" y="512" text-anchor="end" class="txt-purple-ts" font-size="9">s02</text>
+
+<rect x="330" y="556" width="280" height="46" rx="8" class="box-purple"/>
+<text x="360" y="575" class="th txt-purple-th" font-size="13">⑥ Post Hook 日志</text>
+<text x="360" y="591" class="txt-purple-ts" font-size="10">结构化流水记录</text>
+<text x="596" y="575" text-anchor="end" class="txt-purple-ts" font-size="9">s04</text>
+
+<path d="M 470 304 L 470 316" stroke="#7F77DD" stroke-width="1.4" fill="none" marker-end="url(#arrow-purple)"/>
+<path d="M 470 368 L 470 380" stroke="#7F77DD" stroke-width="1.4" fill="none" marker-end="url(#arrow-purple)"/>
+<path d="M 470 426 L 470 436" stroke="#7F77DD" stroke-width="1.4" fill="none" marker-end="url(#arrow-purple)"/>
+<path d="M 470 482 L 470 492" stroke="#7F77DD" stroke-width="1.4" fill="none" marker-end="url(#arrow-purple)"/>
+<path d="M 470 544 L 470 556" stroke="#7F77DD" stroke-width="1.4" fill="none" marker-end="url(#arrow-purple)"/>
+
+<path d="M 610 579 Q 690 579 690 340 Q 690 300 610 342" stroke="#7F77DD" stroke-width="1.4" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow-purple)"/>
+<text x="712" y="470" class="txt-purple-ts" font-size="10">回传结果</text>
+<text x="712" y="484" class="txt-purple-ts" font-size="10">继续循环</text>
+
+<path d="M 200 278 L 328 278" stroke="#1D9E75" stroke-width="1.2" fill="none" marker-end="url(#arrow-teal)"/>
+<path d="M 200 342 Q 260 342 260 518 L 328 518" stroke="#1D9E75" stroke-width="1.2" fill="none" stroke-dasharray="3 3" marker-end="url(#arrow-teal)"/>
+
+<text x="770" y="240" text-anchor="middle" class="txt-caption" font-size="11">外部资源</text>
+<rect x="700" y="252" width="140" height="52" rx="8" class="box-teal"/>
+<text x="770" y="272" text-anchor="middle" class="th txt-teal-th" font-size="12">DeepSeek</text>
+<text x="770" y="290" text-anchor="middle" class="txt-teal-ts" font-size="10">OpenAI 兼容接口</text>
+<rect x="700" y="492" width="140" height="52" rx="8" class="box-teal"/>
+<text x="770" y="512" text-anchor="middle" class="th txt-teal-th" font-size="12">SQLite 账本</text>
+<text x="770" y="530" text-anchor="middle" class="txt-teal-ts" font-size="10">data/ledger.db · s09</text>
+<rect x="700" y="556" width="140" height="46" rx="8" class="box-teal"/>
+<text x="770" y="575" text-anchor="middle" class="th txt-teal-th" font-size="12">日志抽屉</text>
+<text x="770" y="591" text-anchor="middle" class="txt-teal-ts" font-size="10">前端可视化</text>
+
+<path d="M 610 336 L 698 292" stroke="#1D9E75" stroke-width="1.2" fill="none" marker-end="url(#arrow-teal)"/>
+<path d="M 700 296 L 615 342" stroke="#1D9E75" stroke-width="1.2" fill="none" marker-end="url(#arrow-teal)"/>
+<path d="M 610 518 L 698 518" stroke="#1D9E75" stroke-width="1.2" fill="none" marker-end="url(#arrow-teal)"/>
+<path d="M 700 522 L 615 522" stroke="#1D9E75" stroke-width="1.2" fill="none" marker-end="url(#arrow-teal)"/>
+<path d="M 610 579 L 698 579" stroke="#1D9E75" stroke-width="1.2" fill="none" marker-end="url(#arrow-teal)"/>
+
+<path d="M 480 620 L 480 660" stroke="#5F5E5A" stroke-width="1" fill="none" marker-end="url(#arrow-gray)"/>
+<text x="470" y="644" text-anchor="end" class="txt-caption" font-size="10">最终回复</text>
+
+<rect x="240" y="666" width="480" height="40" rx="10" fill="none" stroke="#5F5E5A" stroke-width="1"/>
+<text x="480" y="683" text-anchor="middle" class="th txt-title" font-size="12">前端刷新</text>
+<text x="480" y="698" text-anchor="middle" class="txt-caption" font-size="10">用户看到回复 + 账本视图 + 日志实时更新</text>
+
+<g transform="translate(700, 640)">
+  <rect x="0" y="0" width="18" height="12" rx="3" class="box-purple"/>
+  <text x="24" y="10" class="txt-caption" font-size="10">Harness 环节</text>
+  <rect x="110" y="0" width="18" height="12" rx="3" class="box-teal"/>
+  <text x="134" y="10" class="txt-caption" font-size="10">Skill / 外部</text>
+</g>
+
+<defs>
+  <marker id="arrow-gray" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="#5F5E5A"/>
+  </marker>
+  <marker id="arrow-purple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="#7F77DD"/>
+  </marker>
+  <marker id="arrow-teal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="#1D9E75"/>
+  </marker>
+</defs>
+</svg>

@@ -1,0 +1,8 @@
+.env
+.venv/
+__pycache__/
+data/
+logs/
+.DS_Store
+# 私人面试底稿，不进公开仓库
+docs/demo_script.md

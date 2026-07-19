@@ -1,0 +1,15 @@
+name: keepalive
+
+# 保温器：每10分钟访问一次演示实例，防止 Render 免费档因闲置休眠（冷启动约50秒）
+# 手动触发入口：GitHub仓库 → Actions → keepalive → Run workflow
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping demo instance
+        run: curl -sS -o /dev/null -m 60 https://ai-ledger-uk1j.onrender.com/api/config || true

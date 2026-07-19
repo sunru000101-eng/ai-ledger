@@ -9,8 +9,13 @@ from . import config, db, hooks, llm, permissions, skills, tools
 
 WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"]
 
-# 单用户本地应用：一份全局会话（短期记忆=history，挂起的确认=pending）
-SESSION = {"history": [], "pending": None}
+# 会话按租户隔离：本地模式恒为 "local" 一份；演示模式下每个访客各一份
+# （短期记忆=history，挂起的确认=pending）
+_SESSIONS = {}
+
+
+def _session() -> dict:
+    return _SESSIONS.setdefault(db.TENANT_ID.get(), {"history": [], "pending": None})
 
 
 def build_system_prompt() -> str:
@@ -91,16 +96,16 @@ def _execute_tool(name: str, args: dict, round_no: int, events: list) -> dict:
 
 
 def run_turn(user_message: str) -> dict:
-    if SESSION["pending"]:
+    if _session()["pending"]:
         return {"type": "error",
                 "content": "有一个操作在等你确认，请先在确认卡片上选择。",
                 "events": [], "rounds": 0}
-    SESSION["history"].append({"role": "user", "content": user_message})
+    _session()["history"].append({"role": "user", "content": user_message})
     return _run_loop(rounds=0, events=[])
 
 
 def _run_loop(rounds: int, events: list) -> dict:
-    history = SESSION["history"]
+    history = _session()["history"]
     while rounds < config.MAX_ROUNDS:
         rounds += 1
         try:
@@ -130,7 +135,7 @@ def _run_loop(rounds: int, events: list) -> dict:
 def _process_tool_calls(tcs: list, start_i: int, rounds: int, events: list):
     """依次处理一条assistant消息里的多个工具调用。
     返回 None=全部处理完（继续循环）；返回dict=挂起，等前端确认"""
-    history = SESSION["history"]
+    history = _session()["history"]
     for i in range(start_i, len(tcs)):
         tc = tcs[i]
         name = tc["function"]["name"]
@@ -140,8 +145,8 @@ def _process_tool_calls(tcs: list, start_i: int, rounds: int, events: list):
             history.append(_tool_result_msg(tc["id"], {"error": "参数不是合法JSON，请重新生成"}))
             continue
         if permissions.check(name) == "ask":
-            SESSION["pending"] = {"tcs": tcs, "index": i, "name": name,
-                                  "args": args, "rounds": rounds, "events": events}
+            _session()["pending"] = {"tcs": tcs, "index": i, "name": name,
+                                     "args": args, "rounds": rounds, "events": events}
             return {"type": "confirm", "summary": _describe_action(name, args),
                     "events": events, "rounds": rounds}
         result = _execute_tool(name, args, rounds, events)
@@ -150,10 +155,10 @@ def _process_tool_calls(tcs: list, start_i: int, rounds: int, events: list):
 
 
 def resolve_confirmation(approved: bool) -> dict:
-    pending = SESSION["pending"]
+    pending = _session()["pending"]
     if not pending:
         return {"type": "error", "content": "没有待确认的操作。", "events": [], "rounds": 0}
-    SESSION["pending"] = None
+    _session()["pending"] = None
     tc = pending["tcs"][pending["index"]]
     if approved:
         result = _execute_tool(pending["name"], pending["args"],
@@ -163,7 +168,7 @@ def resolve_confirmation(approved: bool) -> dict:
         entry = hooks.post_tool_use(pending["name"], pending["args"], False,
                                     result, pending["rounds"], 0)
         pending["events"].append(entry)
-    SESSION["history"].append(_tool_result_msg(tc["id"], result))
+    _session()["history"].append(_tool_result_msg(tc["id"], result))
     outcome = _process_tool_calls(pending["tcs"], pending["index"] + 1,
                                   pending["rounds"], pending["events"])
     if outcome is not None:
@@ -172,5 +177,5 @@ def resolve_confirmation(approved: bool) -> dict:
 
 
 def reset_conversation():
-    SESSION["history"] = []
-    SESSION["pending"] = None
+    _session()["history"] = []
+    _session()["pending"] = None

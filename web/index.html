@@ -364,6 +364,9 @@
 <main>
   <!-- ============ 聊天区 ============ -->
   <section id="chat">
+    <div id="demo-banner" style="display:none; padding: 7px 22px; font-size: 12px; color: var(--text-2); background: var(--surface-2); border-bottom: 1px solid var(--border);">
+      🧪 公开演示实例 · 每人每天 30 条消息 · 访客数据互相隔离、保留 7 天 · 请勿输入真实隐私信息
+    </div>
     <div id="chat-header">
       <div>
         <span class="title">AI Ledger</span>
@@ -638,6 +641,9 @@ async function refreshLogs(forceRender) {
 refreshLedger();
 refreshLogs(true);
 input.focus();
+fetch("/api/config").then(x => x.json()).then(c => {
+  if (c.demo) document.getElementById("demo-banner").style.display = "block";
+}).catch(() => {});
 </script>
 </body>
 </html>

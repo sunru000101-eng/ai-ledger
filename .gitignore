@@ -6,3 +6,6 @@ logs/
 .DS_Store
 # 私人面试底稿，不进公开仓库
 docs/demo_script.md
+docs/strategy.md
+docs/reflection.md
+eval/results.md

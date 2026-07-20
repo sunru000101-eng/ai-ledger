@@ -52,20 +52,12 @@ Harness 完整图谱20个环节中**选9砍11**，每个决策的理由见 [docs
 app/          后端（agent.py 是心脏）
 web/          前端（单文件，零外部依赖）
 skills/       技能文件（用户可直接编辑）
-eval/         评测集 + 跑分脚本 + 报告
+eval/         评测集 + 跑分脚本
 tests/        冒烟 / 在线链路 / 验收
-docs/         设计文档 / 产品化战略 / 复盘 / 演示脚本
+docs/         设计文档 / 架构图
 cli.py        终端版（开发调试用）
 ```
 
 ## 文档索引
 
-- [design.md](docs/design.md) —— 产品设计（含Harness八件装备、20选9决策表）
-- [strategy.md](docs/strategy.md) —— 产品化战略（差异化四层堆叠）
-- [reflection.md](docs/reflection.md) —— 复盘（目标漂移的教训）
-- [demo_script.md](docs/demo_script.md) —— 5分钟面试演示脚本 + 追问预案
-- [eval/results.md](eval/results.md) —— 最新评测报告（自动生成）
-
-## 刻意不做
-
-多用户登录（伪需求）、预算提醒（错的阶段）、语音输入与App端（高成本低边际收益）、部署上云（演示用不上+数据不该出去）。每条理由详见设计文档 §1。
+- [design.md](docs/design.md) —— 产品设计（含Harness八件装备、20选9决策表、架构图）

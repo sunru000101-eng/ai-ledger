@@ -11,11 +11,27 @@ from . import config
 # 当前请求的数据归属者（由中间件设置；本地模式恒为 "local"）
 TENANT_ID: ContextVar[str] = ContextVar("tenant_id", default="local")
 
-IS_PG = bool(config.DATABASE_URL)
+# 只有云端服务模式才启用 Postgres：本地自用即使 .env 里配了 DATABASE_URL
+# 也依旧走 SQLite——你的私人账本永远在你自己电脑上
+IS_PG = bool(config.DATABASE_URL) and config.DEMO_MODE
 
 if IS_PG:
-    import psycopg
+    import psycopg  # noqa: F401
     from psycopg.rows import dict_row
+    from psycopg_pool import ConnectionPool
+
+    _PG_URL = (config.DATABASE_URL
+               + ("&" if "?" in config.DATABASE_URL else "?")
+               + "connect_timeout=10")
+    _pool = None
+
+    def _get_pool() -> ConnectionPool:
+        global _pool
+        if _pool is None:
+            # 连接复用池：避免每次查询都重新做TLS握手；min_size=0 让Neon闲时可休眠
+            _pool = ConnectionPool(_PG_URL, min_size=0, max_size=5,
+                                   kwargs={"row_factory": dict_row})
+        return _pool
 
 
 def owner() -> str:
@@ -33,7 +49,7 @@ def _normalize(row: dict) -> dict:
 
 def query(sql: str, params: tuple = ()) -> list:
     if IS_PG:
-        with psycopg.connect(config.DATABASE_URL, row_factory=dict_row) as conn:
+        with _get_pool().connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql.replace("?", "%s"), params)
                 return [_normalize(r) for r in cur.fetchall()]
@@ -52,11 +68,10 @@ def execute(sql: str, params: tuple = ()):
     """写操作。SQL 含 RETURNING 时返回首行 dict，否则返回受影响行数"""
     returning = "returning" in sql.lower()
     if IS_PG:
-        with psycopg.connect(config.DATABASE_URL, row_factory=dict_row) as conn:
+        with _get_pool().connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql.replace("?", "%s"), params)
                 row = cur.fetchone() if returning else None
-                conn.commit()
                 return _normalize(row) if row else (None if returning else cur.rowcount)
     config.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(config.DB_PATH) as conn:

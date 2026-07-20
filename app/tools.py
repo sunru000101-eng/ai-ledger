@@ -1,5 +1,6 @@
 """5个工具：模型只能按按钮，按钮背后是确定性的程序。
-工具边界设计：query_expenses 是参数化查询，不让模型写SQL——安全、可控、可测。"""
+工具边界设计：query_expenses 是参数化查询，不让模型写SQL——安全、可控、可测。
+所有查询带 owner 过滤：谁的数据谁可见，跨账户的 id 也够不着别人的账。"""
 import datetime
 
 from . import db, skills
@@ -104,86 +105,90 @@ def _prev_month(month: str) -> str:
 
 
 def handle_add(args):
-    with db.get_conn() as conn:
-        cur = conn.execute(
-            "INSERT INTO expenses(amount, category, date, note) VALUES (?,?,?,?)",
-            (round(float(args["amount"]), 2), args["category"], args["date"], args.get("note", "")))
-        return {"ok": True, "id": cur.lastrowid, "msg": "已入账"}
+    row = db.execute(
+        "INSERT INTO expenses(owner, amount, category, date, note, created_at) "
+        "VALUES (?,?,?,?,?,?) RETURNING id",
+        (db.owner(), round(float(args["amount"]), 2), args["category"],
+         args["date"], args.get("note", ""), db.now_str()))
+    return {"ok": True, "id": row["id"], "msg": "已入账"}
 
 
 def handle_query(args):
-    where = "date BETWEEN ? AND ?"
-    params = [args["start_date"], args["end_date"]]
+    where = "owner = ? AND date BETWEEN ? AND ?"
+    params = [db.owner(), args["start_date"], args["end_date"]]
     extra, p2 = _category_filter(args.get("category"))
     where += extra
     params += p2
     mode = args["mode"]
-    with db.get_conn() as conn:
-        if mode == "sum":
-            row = conn.execute(
-                f"SELECT COALESCE(SUM(amount),0) AS total, COUNT(*) AS cnt FROM expenses WHERE {where}",
-                params).fetchone()
-            return {"total": round(row["total"], 2), "count": row["cnt"]}
-        if mode == "by_category":
-            rows = conn.execute(
-                f"SELECT category, ROUND(SUM(amount),2) AS total, COUNT(*) AS cnt "
-                f"FROM expenses WHERE {where} GROUP BY category ORDER BY total DESC",
-                params).fetchall()
-            return {"groups": [dict(r) for r in rows]}
-        rows = conn.execute(
-            f"SELECT id, amount, category, date, note FROM expenses WHERE {where} "
-            f"ORDER BY date DESC, id DESC LIMIT 100", params).fetchall()
-        return {"expenses": [dict(r) for r in rows], "note": "最多返回100条"}
+    if mode == "sum":
+        row = db.query_one(
+            f"SELECT COALESCE(SUM(amount),0) AS total, COUNT(*) AS cnt "
+            f"FROM expenses WHERE {where}", tuple(params))
+        return {"total": round(row["total"], 2), "count": row["cnt"]}
+    if mode == "by_category":
+        rows = db.query(
+            f"SELECT category, ROUND(SUM(amount),2) AS total, COUNT(*) AS cnt "
+            f"FROM expenses WHERE {where} GROUP BY category ORDER BY total DESC",
+            tuple(params))
+        return {"groups": rows}
+    rows = db.query(
+        f"SELECT id, amount, category, date, note FROM expenses WHERE {where} "
+        f"ORDER BY date DESC, id DESC LIMIT 100", tuple(params))
+    return {"expenses": rows, "note": "最多返回100条"}
 
 
 def handle_delete(args):
-    with db.get_conn() as conn:
-        row = conn.execute("SELECT * FROM expenses WHERE id=?", (args["id"],)).fetchone()
-        if not row:
-            return {"ok": False, "error": f"没有 id={args['id']} 的账目"}
-        conn.execute("DELETE FROM expenses WHERE id=?", (args["id"],))
-        return {"ok": True, "deleted": dict(row)}
+    row = db.query_one("SELECT * FROM expenses WHERE id = ? AND owner = ?",
+                       (args["id"], db.owner()))
+    if not row:
+        return {"ok": False, "error": f"没有 id={args['id']} 的账目"}
+    db.execute("DELETE FROM expenses WHERE id = ? AND owner = ?",
+               (args["id"], db.owner()))
+    return {"ok": True, "deleted": row}
 
 
 def handle_update(args):
     fields = {k: args[k] for k in ("amount", "category", "date", "note") if k in args}
     if not fields:
         return {"ok": False, "error": "没有提供要修改的字段"}
-    with db.get_conn() as conn:
-        row = conn.execute("SELECT * FROM expenses WHERE id=?", (args["id"],)).fetchone()
-        if not row:
-            return {"ok": False, "error": f"没有 id={args['id']} 的账目"}
-        sets = ", ".join(f"{k}=?" for k in fields)
-        conn.execute(f"UPDATE expenses SET {sets} WHERE id=?", [*fields.values(), args["id"]])
-        new = conn.execute("SELECT * FROM expenses WHERE id=?", (args["id"],)).fetchone()
-        return {"ok": True, "before": dict(row), "after": dict(new)}
+    row = db.query_one("SELECT * FROM expenses WHERE id = ? AND owner = ?",
+                       (args["id"], db.owner()))
+    if not row:
+        return {"ok": False, "error": f"没有 id={args['id']} 的账目"}
+    sets = ", ".join(f"{k} = ?" for k in fields)
+    db.execute(f"UPDATE expenses SET {sets} WHERE id = ? AND owner = ?",
+               (*fields.values(), args["id"], db.owner()))
+    new = db.query_one("SELECT * FROM expenses WHERE id = ? AND owner = ?",
+                       (args["id"], db.owner()))
+    return {"ok": True, "before": row, "after": new}
 
 
 def handle_report(args):
     month = args["month"]
     s, e = month_range(month)
     ps, pe = month_range(_prev_month(month))
-    with db.get_conn() as conn:
-        total = conn.execute(
-            "SELECT COALESCE(SUM(amount),0) t, COUNT(*) c FROM expenses WHERE date BETWEEN ? AND ?",
-            (s, e)).fetchone()
-        prev = conn.execute(
-            "SELECT COALESCE(SUM(amount),0) t FROM expenses WHERE date BETWEEN ? AND ?",
-            (ps, pe)).fetchone()
-        groups = conn.execute(
-            "SELECT category, ROUND(SUM(amount),2) total, COUNT(*) cnt "
-            "FROM expenses WHERE date BETWEEN ? AND ? GROUP BY category ORDER BY total DESC",
-            (s, e)).fetchall()
-        top = conn.execute(
-            "SELECT amount, category, date, note FROM expenses WHERE date BETWEEN ? AND ? "
-            "ORDER BY amount DESC LIMIT 1", (s, e)).fetchone()
+    me = db.owner()
+    total = db.query_one(
+        "SELECT COALESCE(SUM(amount),0) AS t, COUNT(*) AS c FROM expenses "
+        "WHERE owner = ? AND date BETWEEN ? AND ?", (me, s, e))
+    prev = db.query_one(
+        "SELECT COALESCE(SUM(amount),0) AS t FROM expenses "
+        "WHERE owner = ? AND date BETWEEN ? AND ?", (me, ps, pe))
+    groups = db.query(
+        "SELECT category, ROUND(SUM(amount),2) AS total, COUNT(*) AS cnt "
+        "FROM expenses WHERE owner = ? AND date BETWEEN ? AND ? "
+        "GROUP BY category ORDER BY total DESC", (me, s, e))
+    top = db.query_one(
+        "SELECT amount, category, date, note FROM expenses "
+        "WHERE owner = ? AND date BETWEEN ? AND ? ORDER BY amount DESC LIMIT 1",
+        (me, s, e))
     stats = {
         "month": month,
         "total": round(total["t"], 2),
         "count": total["c"],
         "prev_month_total": round(prev["t"], 2),
-        "by_category": [dict(g) for g in groups],
-        "biggest_single": dict(top) if top else None,
+        "by_category": groups,
+        "biggest_single": top,
     }
     # report_style.md 在这里按需注入：只有生成报告时才递给模型
     return {"stats": stats,

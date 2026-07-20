@@ -281,6 +281,43 @@
 
   .empty { color: var(--text-3); font-size: 13px; text-align: center; padding: 32px 12px; }
 
+  /* ============ 账号区与登录弹窗 ============ */
+  #user-area { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
+  #user-area .link-btn {
+    background: none; border: none; color: var(--text-2); font-size: 13px;
+    padding: 5px 10px; border-radius: 6px;
+  }
+  #user-area .link-btn:hover { background: var(--surface-2); color: var(--text); }
+  #user-area .link-btn.primary { background: var(--accent); color: var(--accent-fg); }
+  #user-area .link-btn.primary:hover { opacity: .85; background: var(--accent); color: var(--accent-fg); }
+  #auth-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.35);
+    display: none; place-items: center; z-index: 100;
+  }
+  #auth-overlay.open { display: grid; }
+  #auth-modal {
+    width: 320px; max-width: calc(100vw - 40px);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 22px;
+  }
+  #auth-modal h3 { font-size: 16px; margin-bottom: 4px; }
+  #auth-modal .hint { font-size: 12px; color: var(--text-3); margin-bottom: 14px; }
+  #auth-modal input {
+    width: 100%; margin-bottom: 10px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); border-radius: 8px;
+    padding: 9px 12px; font-size: 14px; outline: none; font-family: inherit;
+  }
+  #auth-modal input:focus { border-color: var(--border-strong); }
+  #auth-modal .err { color: var(--danger); font-size: 12px; min-height: 16px; margin-bottom: 6px; }
+  #auth-modal .actions { display: flex; gap: 8px; }
+  #auth-modal .actions button {
+    flex: 1; padding: 9px 0; border-radius: 8px; font-size: 14px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  }
+  #auth-modal .actions .go { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  #auth-modal .switch { margin-top: 12px; font-size: 12px; color: var(--text-3); text-align: center; }
+  #auth-modal .switch a { color: var(--text); cursor: pointer; text-decoration: underline; }
+
   /* ============ 日志抽屉（右侧滑入） ============ */
   #log-drawer {
     position: fixed; top: 0; right: 0; bottom: 0;
@@ -372,6 +409,7 @@
         <span class="title">AI Ledger</span>
         <span class="subtitle">说一句话，就记好账</span>
       </div>
+      <div id="user-area"></div>
     </div>
     <div id="messages">
       <div class="msg-row assistant">
@@ -424,6 +462,23 @@
     </div>
   </section>
 </main>
+
+<!-- ============ 登录/注册弹窗 ============ -->
+<div id="auth-overlay">
+  <div id="auth-modal">
+    <h3 id="auth-title">注册</h3>
+    <div class="hint" id="auth-hint">需要邀请码 · 注册后账本永久保存</div>
+    <input id="auth-user" placeholder="用户名（2-20位）" autocomplete="username">
+    <input id="auth-pass" type="password" placeholder="密码（至少6位）" autocomplete="current-password">
+    <input id="auth-code" placeholder="邀请码" autocomplete="off">
+    <div class="err" id="auth-err"></div>
+    <div class="actions">
+      <button onclick="closeAuth()">取消</button>
+      <button class="go" id="auth-go" onclick="submitAuth()">注册</button>
+    </div>
+    <div class="switch" id="auth-switch"></div>
+  </div>
+</div>
 
 <!-- ============ 日志抽屉 ============ -->
 <div id="log-overlay" onclick="toggleLogs()"></div>
@@ -638,12 +693,59 @@ async function refreshLogs(forceRender) {
   body.scrollTop = body.scrollHeight;
 }
 
+/* ============ 账号 ============ */
+let authMode = "register";
+function showAuth(mode) {
+  authMode = mode;
+  const login = mode === "login";
+  document.getElementById("auth-title").textContent = login ? "登录" : "注册";
+  document.getElementById("auth-hint").textContent = login ? "欢迎回来" : "需要邀请码 · 注册后账本永久保存";
+  document.getElementById("auth-code").style.display = login ? "none" : "block";
+  document.getElementById("auth-go").textContent = login ? "登录" : "注册";
+  document.getElementById("auth-switch").innerHTML = login
+    ? '没有账号？<a onclick="showAuth(\'register\')">去注册</a>'
+    : '已有账号？<a onclick="showAuth(\'login\')">去登录</a>';
+  document.getElementById("auth-err").textContent = "";
+  document.getElementById("auth-overlay").classList.add("open");
+}
+function closeAuth() { document.getElementById("auth-overlay").classList.remove("open"); }
+async function submitAuth() {
+  const u = document.getElementById("auth-user").value.trim();
+  const p = document.getElementById("auth-pass").value;
+  const c = document.getElementById("auth-code").value.trim();
+  const url = authMode === "login" ? "/api/login" : "/api/register";
+  const body = authMode === "login" ? { username: u, password: p }
+    : { username: u, password: p, invite_code: c };
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    .then(x => x.json()).catch(() => ({ ok: false, error: "网络错误，稍后再试" }));
+  if (r.ok) { location.reload(); }
+  else { document.getElementById("auth-err").textContent = r.error || "失败了，再试试"; }
+}
+async function doLogout() { await post("/api/logout", {}); location.reload(); }
+
+async function initAuthUI() {
+  const [c, m] = await Promise.all([
+    fetch("/api/config").then(x => x.json()).catch(() => ({ demo: false })),
+    fetch("/api/me").then(x => x.json()).catch(() => ({ logged_in: false })),
+  ]);
+  if (!c.demo) return;  // 本地模式：无账号体系
+  const area = document.getElementById("user-area");
+  const banner = document.getElementById("demo-banner");
+  if (m.logged_in) {
+    area.innerHTML = `<span>👤 ${esc(m.username)}</span>` +
+      `<button class="link-btn" onclick="doLogout()">退出</button>`;
+  } else {
+    area.innerHTML = `<button class="link-btn" onclick="showAuth('login')">登录</button>` +
+      (c.register_open ? `<button class="link-btn primary" onclick="showAuth('register')">注册保存数据</button>` : "");
+    banner.textContent = `🧪 游客模式 · 每天 ${c.ip_daily_limit} 条消息 · 数据保留 ${c.tenant_ttl_days} 天 —— 注册后账本永久保存`;
+    banner.style.display = "block";
+  }
+}
+
 refreshLedger();
 refreshLogs(true);
 input.focus();
-fetch("/api/config").then(x => x.json()).then(c => {
-  if (c.demo) document.getElementById("demo-banner").style.display = "block";
-}).catch(() => {});
+initAuthUI();
 </script>
 </body>
 </html>

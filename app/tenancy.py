@@ -1,15 +1,13 @@
-"""演示模式的多租户与成本护栏。
-- 每个访客（cookie sid）一本独立 SQLite 账，互不可见
-- 新访客自动种入几笔演示数据，打开就能看到账本长什么样
-- 成本护栏：每IP日限额 + 全站日限额（内存计数，重启清零，够演示场景用）
-- 过期清理：租户数据文件超过 TTL 天未活跃即删除
+"""多租户与成本护栏（owner 列隔离版）。
+- 游客：cookie sid → owner='g_<sid>'，首次访问自动种入演示数据，TTL 天后清理
+- 注册用户：owner='u_<id>'，数据永久保存，不参与清理
+- 成本护栏：游客按IP限额、注册用户按账号限额、全站总闸
 """
 import datetime
-import time
 
-from . import config, db, tools
+from . import config, db
 
-# 新访客的演示种子数据：(金额, 分类, 几天前, 备注)
+# 新游客的演示种子数据：(金额, 分类, 几天前, 备注)
 DEMO_SEED = [
     (19, "餐饮-饮品", 0, "瑞幸咖啡"),
     (42, "餐饮-正餐", 0, "麻辣烫"),
@@ -19,56 +17,79 @@ DEMO_SEED = [
 ]
 
 
-def activate(sid: str):
-    """把当前请求绑定到某个访客的独立账本（在中间件里调用）"""
-    db.TENANT_ID.set(sid)
-    path = config.TENANTS_DIR / f"{sid}.db"
-    fresh = not path.exists()
-    db.DB_PATH_OVERRIDE.set(path)
-    if fresh:
-        db.init_db()
-        _seed()
-    else:
-        path.touch()  # 刷新活跃时间，供 TTL 清理判断
+def activate_guest(sid: str):
+    owner = f"g_{sid}"
+    db.TENANT_ID.set(owner)
+    _touch(owner, "guest", seed_if_new=True)
 
 
-def _seed():
+def activate_user(user_id: int):
+    owner = f"u_{user_id}"
+    db.TENANT_ID.set(owner)
+    _touch(owner, "user", seed_if_new=False)
+
+
+def _touch(owner: str, kind: str, seed_if_new: bool):
+    row = db.query_one("SELECT owner FROM tenants WHERE owner = ?", (owner,))
+    if row:
+        db.execute("UPDATE tenants SET last_active = ? WHERE owner = ?",
+                   (db.now_str(), owner))
+        return
+    db.execute("INSERT INTO tenants(owner, kind, last_active) VALUES (?,?,?)",
+               (owner, kind, db.now_str()))
+    if seed_if_new:
+        _seed(owner)
+
+
+def _seed(owner: str):
     today = datetime.date.today()
     for amount, category, days_ago, note in DEMO_SEED:
-        tools.TOOL_HANDLERS["add_expense"]({
-            "amount": amount,
-            "category": category,
-            "date": (today - datetime.timedelta(days=days_ago)).isoformat(),
-            "note": note,
-        })
+        db.execute(
+            "INSERT INTO expenses(owner, amount, category, date, note, created_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (owner, amount, category,
+             (today - datetime.timedelta(days=days_ago)).isoformat(), note, db.now_str()))
+
+
+def merge_guest_into_user(sid: str, user_id: int) -> int:
+    """注册时把游客期间记的账带进新账户（种子演示数据除外……全带走也无妨，从简：全带走）"""
+    return db.execute("UPDATE expenses SET owner = ? WHERE owner = ?",
+                      (f"u_{user_id}", f"g_{sid}"))
 
 
 def cleanup_old_tenants() -> int:
-    if not config.TENANTS_DIR.exists():
-        return 0
-    cutoff = time.time() - config.TENANT_TTL_DAYS * 86400
-    removed = 0
-    for f in config.TENANTS_DIR.glob("*.db"):
-        if f.stat().st_mtime < cutoff:
-            f.unlink(missing_ok=True)
-            removed += 1
-    return removed
+    """只清游客；注册用户永不清理"""
+    cutoff = (datetime.datetime.now() - datetime.timedelta(days=config.TENANT_TTL_DAYS)
+              ).strftime("%Y-%m-%d %H:%M:%S")
+    stale = db.query("SELECT owner FROM tenants WHERE kind = 'guest' AND last_active < ?",
+                     (cutoff,))
+    for row in stale:
+        db.execute("DELETE FROM expenses WHERE owner = ?", (row["owner"],))
+        db.execute("DELETE FROM tenants WHERE owner = ?", (row["owner"],))
+    return len(stale)
 
 
-# ---- 成本护栏：内存计数（重启清零；最坏损失=一天限额，可接受）----
-_usage = {"date": None, "ip": {}, "total": 0}
+# ---- 成本护栏：内存计数（重启清零；最坏损失=一天限额）----
+_usage = {"date": None, "key": {}, "total": 0}
 
 
-def check_and_count(ip: str):
-    """返回 (是否放行, 拒绝原因)。放行时消耗一条额度。"""
+def check_and_count(ip: str, user_id=None):
+    """游客按IP、注册用户按账号。返回 (是否放行, 拒绝原因)"""
     today = datetime.date.today().isoformat()
     if _usage["date"] != today:
-        _usage.update({"date": today, "ip": {}, "total": 0})
+        _usage.update({"date": today, "key": {}, "total": 0})
     if _usage["total"] >= config.GLOBAL_DAILY_LIMIT:
-        return False, "演示站今天的总额度用完了，明天再来吧～（这是成本护栏在工作）"
-    used = _usage["ip"].get(ip, 0)
-    if used >= config.IP_DAILY_LIMIT:
-        return False, f"你今天的体验额度（{config.IP_DAILY_LIMIT}条消息）用完啦，明天再来～"
-    _usage["ip"][ip] = used + 1
+        return False, "服务今天的总额度用完了，明天再来吧～（成本护栏在工作）"
+    if user_id is not None:
+        key, limit = f"u_{user_id}", config.ACCOUNT_DAILY_LIMIT
+        tip = f"你今天的额度（{limit}条消息）用完啦，明天再来～"
+    else:
+        key, limit = f"ip_{ip}", config.IP_DAILY_LIMIT
+        tip = (f"游客体验额度（{limit}条/天）用完啦～"
+               f"注册用户每天有 {config.ACCOUNT_DAILY_LIMIT} 条哦")
+    used = _usage["key"].get(key, 0)
+    if used >= limit:
+        return False, tip
+    _usage["key"][key] = used + 1
     _usage["total"] += 1
     return True, None

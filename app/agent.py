@@ -66,8 +66,8 @@ def _describe_action(name: str, args: dict) -> str:
     """给确认卡片生成人话描述"""
     eid = args.get("id")
     detail = ""
-    with db.get_conn() as conn:
-        row = conn.execute("SELECT * FROM expenses WHERE id=?", (eid,)).fetchone()
+    row = db.query_one("SELECT * FROM expenses WHERE id = ? AND owner = ?",
+                       (eid, db.owner()))
     if row:
         detail = f"{row['date']} {row['category']} {row['amount']}元"
         if row["note"]:
